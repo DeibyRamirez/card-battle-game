@@ -109,7 +109,7 @@ export default function GameRoomPage() {
   const handleManosActualizadas = (manosActualizadas: any) => {
     console.log("🎴 Manos actualizadas:", manosActualizadas);
     if (manosActualizadas[playerId]) {
-      // Mapear las IDs de cartas a objetos completos (puedes optimizar esto con una llamada a la API si es necesario)
+      // Mapear las IDs de cartas a objetos completos
       const actualizarCartas = async () => {
         const jugador = await obtenerJugador(playerId);
         setMyCards(jugador.mano.map((c: any) => ({
@@ -123,6 +123,9 @@ export default function GameRoomPage() {
         })));
       };
       actualizarCartas();
+    } else {
+      // Si no hay cambios específicos para este jugador, recarga manualmente para seguridad
+      loadMyCards(playerId);
     }
   };
 
@@ -327,9 +330,12 @@ export default function GameRoomPage() {
         setCartaSeleccionada(null);
         setNumeroGanador(null);
         setEsperandoResultado(false);
+        setHasConfirmedCards(false); // Permitir nueva confirmación
+        setSelectedCards([]); // Limpiar selección anterior para nueva ronda
 
         await loadMyCards(playerId);
         await loadPlayers();
+        await loadGameData(playerId); // Refresca estado del juego (debería ir a "selecting" si backend lo setea)
 
         if (data.juegoFinalizado) {
           setGameState("finished");
@@ -365,6 +371,23 @@ export default function GameRoomPage() {
       });
     };
 
+    const handleNuevaRonda = (data: any) => {
+      console.log("🔁 Nueva ronda iniciada:", data.mensaje);
+      setSelectedCards([]);
+      setGameState("selecting");
+      setHasConfirmedCards(false);
+      setApuestas([]);
+      setMiApuesta(null);
+      setCartaSeleccionada(null);
+      setNumeroGanador(null);
+      setEsperandoResultado(false);
+      loadGameData(playerId); // Asegura sync con backend
+      toast({
+        title: "Nueva ronda",
+        description: data.mensaje,
+      });
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("jugadorActualizado", handleJugadorActualizado);
@@ -378,7 +401,8 @@ export default function GameRoomPage() {
     socket.on("jugadorRendido", handleJugadorRendido);
     socket.on("juegoFinalizado", handleJuegoFinalizado);
     socket.on("errorEvento", handleError);
-    socket.on("manosActualizadas", handleManosActualizadas); // Registrar el nuevo manejador
+    socket.on("manosActualizadas", handleManosActualizadas);
+    socket.on("nuevaRonda", handleNuevaRonda); // Movido aquí para que esté siempre activo
 
     if (socket.connected) {
       setIsConnected(true);
@@ -401,45 +425,14 @@ export default function GameRoomPage() {
       socket.off("jugadorRendido", handleJugadorRendido);
       socket.off("juegoFinalizado", handleJuegoFinalizado);
       socket.off("errorEvento", handleError);
-      socket.off("manosActualizadas", handleManosActualizadas); // Limpiar el nuevo manejador
+      socket.off("manosActualizadas", handleManosActualizadas);
+      socket.off("nuevaRonda", handleNuevaRonda); // Cleanup
       socket.disconnect();
     };
-  }, [router, gameCode, toast, loadGameData, loadPlayers, loadMyCards]);
+  }, [router, gameCode, toast, loadGameData, loadPlayers, loadMyCards, playerId]);
 
-
-
-  // Auto-resolver cuando todos apuestan
-  useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
-
-    if (
-      gameState === "playing" &&
-      apuestas.length > 0 &&
-      !esperandoResultado &&
-      apuestas.length === players.filter((p) => p.activo).length
-    ) {
-      interval = setInterval(async () => {
-        try {
-          console.log("Intentando resolver ronda para", gameCode);
-          const response = await fetch(`${API_URL}/api/juegos/${gameCode}/resolver-ronda`, {
-            method: "POST",
-          });
-
-          const data = await response.json();
-          if (response.ok) {
-            if (interval) clearInterval(interval);
-            await handleResultadoRonda(data);
-          }
-        } catch (error) {
-          console.error("Error al resolver ronda:", error);
-        }
-      }, 2000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [apuestas, gameState, gameCode, esperandoResultado, players, playerId, loadMyCards, loadPlayers]);
+  // Comenta o elimina este useEffect para evitar races con socket resolution
+  // useEffect(() => { ... auto-resolver ... });
 
   const handleResultadoRonda = async (data: any) => {
     console.log("🏆 Resultado:", data);
@@ -476,10 +469,13 @@ export default function GameRoomPage() {
     setCartaSeleccionada(null);
     setNumeroGanador(null);
     setEsperandoResultado(false);
+    setHasConfirmedCards(false);
+    setSelectedCards([]);
 
     try {
       await loadMyCards(playerId);
       await loadPlayers();
+      await loadGameData(playerId);
     } catch (error) {
       console.error("Error recargando datos:", error);
     }
@@ -510,13 +506,7 @@ export default function GameRoomPage() {
       cartas: selectedCards,
     });
 
-    socket.on("nuevaRonda", (data) => {
-      console.log("🔁 Nueva ronda iniciada:", data.mensaje);
-      // Reinicia el estado local de selección
-      setSelectedCards([]);
-      setGameState("selecting");
-    });
-
+    // Removido socket.on de aquí; ahora está en el useEffect principal
 
     setHasConfirmedCards(true);
     toast({
