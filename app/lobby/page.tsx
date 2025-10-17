@@ -4,12 +4,11 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Library, Plus, User, LogOut, Users, Trophy } from "lucide-react"
-
+import { Library, Plus, User, LogOut, Users, Trophy, Layers } from "lucide-react"
 
 import io from "socket.io-client";
 
-const socket = io("http://localhost:4000"); // o tu URL en producción
+const socket = io("http://localhost:4000");
 
 socket.on("connect", () => {
   console.log("✅ Conectado al servidor socket con id:", socket.id);
@@ -29,13 +28,21 @@ interface Jugador {
   ganadas: number
 }
 
-// Funciones de API (ajusta la URL según tu backend)
+// Funciones de API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
 
 async function obtenerJugador(id: string) {
   const response = await fetch(`${API_URL}/api/jugadores/${id}`)
   if (!response.ok) {
     throw new Error("Error al obtener jugador")
+  }
+  return response.json()
+}
+
+async function obtenerTodasLasCartas() {
+  const response = await fetch(`${API_URL}/api/cartas`)
+  if (!response.ok) {
+    throw new Error("Error al obtener cartas")
   }
   return response.json()
 }
@@ -69,6 +76,7 @@ async function unirseJuego(codigo: string, jugadorId: string) {
 export default function LobbyPage() {
   const [playerName, setPlayerName] = useState("")
   const [jugadorData, setJugadorData] = useState<Jugador | null>(null)
+  const [totalCartas, setTotalCartas] = useState(0)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
@@ -89,6 +97,10 @@ export default function LobbyPage() {
         // Obtener datos completos del jugador desde el backend
         const datosJugador = await obtenerJugador(jugadorId)
         setJugadorData(datosJugador)
+
+        // Obtener total de cartas disponibles en el juego
+        const cartas = await obtenerTodasLasCartas()
+        setTotalCartas(cartas.length)
       } catch (error) {
         console.error("Error al cargar datos del jugador:", error)
       }
@@ -96,7 +108,6 @@ export default function LobbyPage() {
 
     cargarDatosJugador()
   }, [router])
-
 
   const handleBuscarPartidas = () => {
     router.push(`/join-game`)
@@ -141,28 +152,28 @@ export default function LobbyPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12">
-        <div className="max-w-5xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           <div className="text-center space-y-2">
             <h1 className="text-4xl font-bold tracking-tight text-balance">🔥 Batalla de Cartas 🔥</h1>
             <p className="text-muted-foreground text-pretty">Bienvenido, <span className="text-primary font-semibold">{playerName}</span> 👋</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Card 1: Ver Cartas */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Card 1: Ver Mi Mano */}
             <Card className="border-border/50 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5 group">
               <CardHeader>
                 <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 w-fit mb-2 group-hover:bg-primary/20 transition-colors">
                   <Library className="w-6 h-6 text-primary" />
                 </div>
                 <CardTitle>Mi Mano</CardTitle>
-                <CardDescription>Cartas en tu poder actualmente</CardDescription>
+                <CardDescription>Tus cartas personales</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
                   <p className="text-3xl font-bold text-primary">
                     {jugadorData?.mano?.length ?? 0}
                   </p>
-                  <p className="text-sm text-muted-foreground">Cartas en mano</p>
+                  <p className="text-sm text-muted-foreground">Cartas en tu mano</p>
                 </div>
                 <Button className="w-full" variant="outline" onClick={() => router.push("/cards")}>
                   Ver Mi Mano
@@ -170,14 +181,39 @@ export default function LobbyPage() {
               </CardContent>
             </Card>
 
-            {/* Card 2: Crear Partida */}
+            {/* Card 2: Cartas del Juego */}
+            <Card className="border-border/50 hover:border-purple-500/50 transition-all hover:shadow-lg hover:shadow-purple-500/5 group">
+              <CardHeader>
+                <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20 w-fit mb-2 group-hover:bg-purple-500/20 transition-colors">
+                  <Layers className="w-6 h-6 text-purple-500" />
+                </div>
+                <CardTitle>Cartas del Juego</CardTitle>
+                <CardDescription>Todas las cartas disponibles</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
+                  <p className="text-3xl font-bold text-purple-500">
+                    {totalCartas}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Cartas totales</p>
+                </div>
+                <Button 
+                  className="w-full bg-purple-500 hover:bg-purple-600 text-white" 
+                  onClick={() => router.push("/all-cards")}
+                >
+                  Ver Todas las Cartas
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Card 3: Crear Partida */}
             <Card className="border-border/50 hover:border-accent/50 transition-all hover:shadow-lg hover:shadow-accent/5 group">
               <CardHeader>
                 <div className="p-3 bg-accent/10 rounded-xl border border-accent/20 w-fit mb-2 group-hover:bg-accent/20 transition-colors">
                   <Plus className="w-6 h-6 text-accent" />
                 </div>
                 <CardTitle>Crear Partida</CardTitle>
-                <CardDescription>Configura y crea una nueva batalla</CardDescription>
+                <CardDescription>Nueva batalla personalizada</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm text-muted-foreground">
@@ -195,7 +231,7 @@ export default function LobbyPage() {
               </CardContent>
             </Card>
 
-            {/* Card 3: Unirse a Partida */}
+            {/* Card 4: Unirse a Partida */}
             <Card className="border-border/50 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5 group">
               <CardHeader>
                 <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 w-fit mb-2 group-hover:bg-primary/20 transition-colors">
@@ -203,7 +239,7 @@ export default function LobbyPage() {
                 </div>
                 <CardTitle>Unirse a Partida</CardTitle>
                 <CardDescription>
-                  Busca y únete a partidas disponibles
+                  Busca partidas activas
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
