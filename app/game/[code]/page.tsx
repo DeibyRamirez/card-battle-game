@@ -74,7 +74,9 @@ export default function GameRoomPage() {
 
   const [playerName, setPlayerName] = useState("");
   const [playerId, setPlayerId] = useState("");
-  const [gameState, setGameState] = useState<"waiting" | "selecting" | "playing" | "finished">("waiting");
+  const [gameState, setGameState] = useState<
+    "waiting" | "selecting" | "playing" | "finished"
+  >("waiting");
   const [players, setPlayers] = useState<Player[]>([]);
   const [myCards, setMyCards] = useState<GameCard[]>([]);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -102,6 +104,27 @@ export default function GameRoomPage() {
   useEffect(() => {
     playersRef.current = players;
   }, [players]);
+
+  // Función para manejar las manos actualizadas
+  const handleManosActualizadas = (manosActualizadas: any) => {
+    console.log("🎴 Manos actualizadas:", manosActualizadas);
+    if (manosActualizadas[playerId]) {
+      // Mapear las IDs de cartas a objetos completos (puedes optimizar esto con una llamada a la API si es necesario)
+      const actualizarCartas = async () => {
+        const jugador = await obtenerJugador(playerId);
+        setMyCards(jugador.mano.map((c: any) => ({
+          _id: c._id,
+          nombre: c.nombre,
+          ataque: c.atributos?.fuerza || 0,
+          velocidad: c.atributos?.velocidad || 0,
+          inteligencia: c.atributos?.inteligencia || 0,
+          rareza: c.atributos?.rareza || 0,
+          imagen: c.imagen || "/placeholder.png",
+        })));
+      };
+      actualizarCartas();
+    }
+  };
 
   const loadPlayers = useCallback(async () => {
     try {
@@ -269,7 +292,6 @@ export default function GameRoomPage() {
 
     const handleCartaApostada = (data: any) => {
       console.log("🎲 Carta apostada:", data);
-      // Agregar a la lista de apuestas (sin mostrar el número aún)
       setApuestas((prev) => {
         const existe = prev.find((a) => a.jugadorId === data.jugadorId);
         if (existe) return prev;
@@ -277,35 +299,6 @@ export default function GameRoomPage() {
       });
     };
 
-    const handleJugadorRendido = async (data: any) => {
-      console.log("🏳️ Rendido:", data);
-      setMensaje("Un jugador se rindió");
-      setTimeout(() => setMensaje(""), 3000);
-      await loadPlayers();
-    };
-
-    const handleJuegoFinalizado = (data: any) => {
-      console.log("🏁 Finalizado:", data);
-      setGameState("finished");
-      const esGanador = data.ganadorId === id;
-      toast({
-        title: esGanador ? "🎉 ¡GANASTE!" : "Juego finalizado",
-        description: data.mensaje,
-        variant: esGanador ? "default" : "destructive",
-        duration: 10000,
-      });
-    };
-
-    const handleError = (data: any) => {
-      console.error("❌ Error:", data.message);
-      toast({
-        title: "Error",
-        description: data.message,
-        variant: "destructive",
-      });
-    };
-
-    // Agrega este manejador en useEffect para eventos de socket
     const handleRondaResuelta = (data: any) => {
       console.log("🏆 Ronda resuelta:", data);
       setNumeroGanador(data.numeroGanador);
@@ -344,6 +337,33 @@ export default function GameRoomPage() {
       }, 4000);
     };
 
+    const handleJugadorRendido = async (data: any) => {
+      console.log("🏳️ Rendido:", data);
+      setMensaje("Un jugador se rindió");
+      setTimeout(() => setMensaje(""), 3000);
+      await loadPlayers();
+    };
+
+    const handleJuegoFinalizado = (data: any) => {
+      console.log("🏁 Finalizado:", data);
+      setGameState("finished");
+      const esGanador = data.ganadorId === id;
+      toast({
+        title: esGanador ? "🎉 ¡GANASTE!" : "Juego finalizado",
+        description: data.mensaje,
+        variant: esGanador ? "default" : "destructive",
+        duration: 10000,
+      });
+    };
+
+    const handleError = (data: any) => {
+      console.error("❌ Error:", data.message);
+      toast({
+        title: "Error",
+        description: data.message,
+        variant: "destructive",
+      });
+    };
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
@@ -358,7 +378,7 @@ export default function GameRoomPage() {
     socket.on("jugadorRendido", handleJugadorRendido);
     socket.on("juegoFinalizado", handleJuegoFinalizado);
     socket.on("errorEvento", handleError);
-    
+    socket.on("manosActualizadas", handleManosActualizadas); // Registrar el nuevo manejador
 
     if (socket.connected) {
       setIsConnected(true);
@@ -381,12 +401,14 @@ export default function GameRoomPage() {
       socket.off("jugadorRendido", handleJugadorRendido);
       socket.off("juegoFinalizado", handleJuegoFinalizado);
       socket.off("errorEvento", handleError);
+      socket.off("manosActualizadas", handleManosActualizadas); // Limpiar el nuevo manejador
       socket.disconnect();
-      
     };
   }, [router, gameCode, toast, loadGameData, loadPlayers, loadMyCards]);
 
-  // Auto-resolver cuando todos apostaron
+
+
+  // Auto-resolver cuando todos apuestan
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
 
@@ -487,6 +509,14 @@ export default function GameRoomPage() {
       jugadorId: playerId,
       cartas: selectedCards,
     });
+
+    socket.on("nuevaRonda", (data) => {
+      console.log("🔁 Nueva ronda iniciada:", data.mensaje);
+      // Reinicia el estado local de selección
+      setSelectedCards([]);
+      setGameState("selecting");
+    });
+
 
     setHasConfirmedCards(true);
     toast({
@@ -890,4 +920,8 @@ export default function GameRoomPage() {
       </main>
     </div>
   );
+}
+
+function handleManosActualizadas(...args: any[]): void {
+  throw new Error("Function not implemented.");
 }
